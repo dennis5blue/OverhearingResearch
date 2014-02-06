@@ -18,7 +18,7 @@ using namespace std;
 
 matrix<double> Covm(const matrix<double>, const double, const double);
 std::vector<int> SINRscheduling(const std::vector<int>, const matrix<double>);
-std::vector<int> CrossEntropy(const int, const int, const double, const double, const matrix<double>);
+std::vector<int> CrossEntropy(const int, const int, const double, const double, const matrix<double>, const std::vector<double>);
 const int numMachines = 50;
 
 int main( int argc, char *argv[])
@@ -102,9 +102,7 @@ int main( int argc, char *argv[])
       const int baseSize = 8*numIter;
       const double alpha = 0.7;
       const double beta = 0;
-      std::vector<double> vecCrossEntropyPb;
-      for (int i=0; i!=numMachines; i++) vecCrossEntropyPb.push_back(0.5);
-      vecMachineSelection = CrossEntropy(scheAlgorithm, baseSize, alpha, beta, myTopology);
+      vecMachineSelection = CrossEntropy(scheAlgorithm, baseSize, alpha, beta, myTopology, vecResidualEnergy);
     } while (gatheredEntropy > fidelityRatio);
     
   return 0;
@@ -139,10 +137,40 @@ std::vector<int> SINRscheduling(const std::vector<int> m_vecMachineSelection, co
     return m_vecMachineSehedule;
 }
 
-std::vector<int> CrossEntropy(const int m_scheAlgorithm, const int m_baseSize, const double m_alpha, const double m_beta, const matrix<double> m_myTopology)
+std::vector<int> CrossEntropy(const int m_scheAlgorithm, const int m_baseSize, const double m_alpha, const double m_beta, const matrix<double> m_myTopology, const std::vector<double> m_vecResidualEnergy)
 {
-  std::vector<int> m_vecMachineSelection;
-  //for test
+  std::vector<int>    m_vecMachineSelection;
+  std::vector<double> m_vecCrossEntropyProb;
+  double m_maxEnergy = *max_element(m_vecResidualEnergy.begin(), m_vecResidualEnergy.end());
+  double m_minEnergy = *min_element(m_vecResidualEnergy.begin(), m_vecResidualEnergy.end());
+  
+  //Initial probability
+  for(int i=0; i!=numMachines; i++){
+    if(m_maxEnergy - m_minEnergy > 0){
+      double m_deltaTemp = (m_vecResidualEnergy[i]-m_minEnergy)/(m_maxEnergy-m_minEnergy);
+      double m_pbTemp = 0.5 + 0.5*(m_deltaTemp-0.5);
+      m_vecCrossEntropyProb.push_back(m_pbTemp);
+    } else
+      m_vecCrossEntropyProb.push_back(0.5);
+  }
+  
+  //Calculate machine selection by bernoulli trail
+  std::vector< std::vector<bool> > m_vecvecBernoulliResult;
+  std::vector<bool> m_vecBernoulliTemp;
+  double m_randomSeed = 0;
+  bool m_selectSeed = 0;
+  for(int j=0; j!=m_baseSize; j++){
+    for(int k=0; k!=numMachines; k++){
+      m_randomSeed = (double)rand()/(double)RAND_MAX;
+      if(m_vecCrossEntropyProb[k] - m_randomSeed > 0) m_selectSeed = 1;
+      else  m_selectSeed = 0;
+      if(j==0)  m_vecBernoulliTemp.push_back(m_selectSeed);
+      else  m_vecBernoulliTemp[k] = m_selectSeed;
+    }
+    m_vecvecBernoulliResult.push_back(m_vecBernoulliTemp);
+  }
+
+  /*/for test
   cout << "Machine Selection = ";
   for (int i=0; i!=10; i++){
     m_vecMachineSelection.push_back(i);
@@ -158,6 +186,6 @@ std::vector<int> CrossEntropy(const int m_scheAlgorithm, const int m_baseSize, c
     for(int j=0; j!=m_numSelected; j++) cout << m_vecMachineSchedule[j] << " ";
     cout << endl;
   }
-  //end test
+  //end test*/
   return m_vecMachineSelection;
 }
