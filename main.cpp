@@ -1,6 +1,5 @@
 #include <boost/numeric/ublas/matrix.hpp>
 #include <boost/numeric/ublas/io.hpp>
-#include <random>
 //#include <boost/program_options.hpp>
 #include <utility>
 #include <cstdio>
@@ -19,6 +18,7 @@ using namespace std;
 
 matrix<double> Covm(const matrix<double>, const double, const double);
 std::vector<int> SINRscheduling(const std::vector<int>, const matrix<double>);
+std::vector<int> CrossEntropy(const int, const int, const double, const double, const matrix<double>);
 const int numMachines = 50;
 
 int main( int argc, char *argv[])
@@ -80,49 +80,34 @@ int main( int argc, char *argv[])
     topologyFile.close();
     //cout << myTopology << endl;
     
-    //----------------------------------------------------------------------
-    //Create covariance matrix and initialize settings
+    //---------------------------------------------------------------------------------//
+    //-----Create Covariance matrix, Residual energy vector and set Fidelity ratio-----//
+    //---------------------------------------------------------------------------------//
     matrix<double> covMatrix(numMachines, numMachines);
     covMatrix = Covm(myTopology, 1, corrLevel);
     //cout << covMatrix << endl;
-    
     const double totalEntropy[15] = {402.621123, 387.475685, 372.827010, 358.572206, 344.720873, 331.319605, 306.013552, 282.762930, 261.459375, 241.906822, 223.895835, 207.232974, 191.749306, 177.300603, 163.764679};
     const double fidelityRatio = 0.7*totalEntropy[corrIndex];
-    matrix<double> residualEnergy(numMachines,1);
-    for (int i=0; i!=numMachines; i++) residualEnergy(i,0) = 1;
+    std::vector<double> vecResidualEnergy;
+    for (int i=0; i!=numMachines; i++) vecResidualEnergy.push_back(1);
     int countLifetime = 0;
+    double gatheredEntropy = fidelityRatio;
     
     //---------------------------------------------------------//
     //------------Start the corss entropy algorithm------------//
     //---------------------------------------------------------//
-    std::vector<int> vecMachineSelection;
-    const int numIter = 50;
-    const int baseSize = 8*numIter;
-    const double alpha = 0.7;
-    std::vector<double> vecCrossEntropyPb;
-    std::bernoulli_distribution distribution(0.5);
+    do {
+      std::vector<int> vecMachineSelection;
+      const int numIter = 50;
+      const int baseSize = 8*numIter;
+      const double alpha = 0.7;
+      const double beta = 0;
+      std::vector<double> vecCrossEntropyPb;
+      for (int i=0; i!=numMachines; i++) vecCrossEntropyPb.push_back(0.5);
+      vecMachineSelection = CrossEntropy(scheAlgorithm, baseSize, alpha, beta, myTopology);
+    } while (gatheredEntropy > fidelityRatio);
     
-    //for test
-    cout << "Machine Selection = ";
-    for (int i=0; i!=10; i++){
-        vecMachineSelection.push_back(i);
-        cout << vecMachineSelection[i] << " ";
-    }
-    cout << endl;
-    //end for test
-    int numSelected = vecMachineSelection.size();
-    std::vector<int> vecMachineSchedule;
-    if (scheAlgorithm == 1) {
-        vecMachineSchedule = SINRscheduling(vecMachineSelection, myTopology);
-        // cout for test
-        cout << "Number of selected machines = " << numSelected << endl;
-        cout << "Machine Schedule = " ;
-        for (int i=0; i!=numSelected; i++) cout << vecMachineSchedule[i] << " ";
-        cout << endl;
-        //end cout
-    }
-    
-    return 0;
+  return 0;
 }
 
 matrix<double> Covm(const matrix<double> m_myTopology, const double m_sigma, const double m_corrLevel)
@@ -154,3 +139,25 @@ std::vector<int> SINRscheduling(const std::vector<int> m_vecMachineSelection, co
     return m_vecMachineSehedule;
 }
 
+std::vector<int> CrossEntropy(const int m_scheAlgorithm, const int m_baseSize, const double m_alpha, const double m_beta, const matrix<double> m_myTopology)
+{
+  std::vector<int> m_vecMachineSelection;
+  //for test
+  cout << "Machine Selection = ";
+  for (int i=0; i!=10; i++){
+    m_vecMachineSelection.push_back(i);
+    cout << m_vecMachineSelection[i] << " ";
+  }
+  cout << endl;
+  int m_numSelected = m_vecMachineSelection.size();
+  std::vector<int> m_vecMachineSchedule;
+  if(m_scheAlgorithm == 1){
+    m_vecMachineSchedule = SINRscheduling(m_vecMachineSelection, m_myTopology);
+    cout << "Number of selected machines = " << m_numSelected << endl;
+    cout << "Machine schedule = ";
+    for(int j=0; j!=m_numSelected; j++) cout << m_vecMachineSchedule[j] << " ";
+    cout << endl;
+  }
+  //end test
+  return m_vecMachineSelection;
+}
