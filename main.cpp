@@ -119,28 +119,35 @@ matrix<double> Covm(const matrix<double> m_myTopology, const double m_sigma, con
     return m_covMatrix;
 }
 
-std::vector<int> SINRscheduling(const std::vector<int> m_vecMachineSelection, const matrix<double> m_myTopology)
+std::vector<int> SINRscheduling(const std::vector<int> m_vecMachineSelection, const std::vector<double> m_ChannelCapacity)
 {
     int m_numSelected = m_vecMachineSelection.size();
-    std::vector<int> m_vecMachineSehedule;
+    std::vector<int> m_vecMachineSchedule;
     std::vector< pair<double,int> > m_vecChannelAndMachine;
     for (int i=0; i!=m_numSelected; i++) {
         int m_number = m_vecMachineSelection[i];
-        double m_channel = m_myTopology(i,2);
+        double m_channel = m_ChannelCapacity[i];
         m_vecChannelAndMachine.push_back(make_pair(m_channel,m_number));
     }
     std::sort(m_vecChannelAndMachine.begin(), m_vecChannelAndMachine.end());
     for (int j=0; j!=m_numSelected; j++) {
         int m_scheduledMachine = m_vecChannelAndMachine[j].second;
-        m_vecMachineSehedule.push_back(m_scheduledMachine);
+        m_vecMachineSchedule.push_back(m_scheduledMachine);
     }
-    return m_vecMachineSehedule;
+    return m_vecMachineSchedule;
 }
 
 std::vector<int> CrossEntropy(const int m_scheAlgorithm, const int m_baseSize, const double m_alpha, const double m_beta, const matrix<double> m_myTopology, const std::vector<double> m_vecResidualEnergy)
 {
-  std::vector<int>    m_vecMachineSelection;
-  std::vector<double> m_vecCrossEntropyProb;
+  std::vector<int>                m_vecMachineSelection;
+  std::vector<double>             m_vecCrossEntropyProb;
+  std::vector< pair<double,int> > m_vecEnergyAndMachine;
+  std::vector<int>                m_vecNoPowerMachine;
+  for (int e=0; e!=numMachines; e++){ //record machines which still have energy
+    if(m_vecResidualEnergy[e] > 0)
+      m_vecEnergyAndMachine.push_back(make_pair(m_vecResidualEnergy[e],e));
+    else  m_vecNoPowerMachine.push_back(e);
+  }
   double m_maxEnergy = *max_element(m_vecResidualEnergy.begin(), m_vecResidualEnergy.end());
   double m_minEnergy = *min_element(m_vecResidualEnergy.begin(), m_vecResidualEnergy.end());
   
@@ -154,38 +161,61 @@ std::vector<int> CrossEntropy(const int m_scheAlgorithm, const int m_baseSize, c
       m_vecCrossEntropyProb.push_back(0.5);
   }
   
-  //Calculate machine selection by bernoulli trail
-  std::vector< std::vector<bool> > m_vecvecBernoulliResult;
-  std::vector<bool> m_vecBernoulliTemp;
-  double m_randomSeed = 0;
-  bool m_selectSeed = 0;
-  for(int j=0; j!=m_baseSize; j++){
-    for(int k=0; k!=numMachines; k++){
-      m_randomSeed = (double)rand()/(double)RAND_MAX;
-      if(m_vecCrossEntropyProb[k] - m_randomSeed > 0) m_selectSeed = 1;
-      else  m_selectSeed = 0;
-      if(j==0)  m_vecBernoulliTemp.push_back(m_selectSeed);
-      else  m_vecBernoulliTemp[k] = m_selectSeed;
-    }
-    m_vecvecBernoulliResult.push_back(m_vecBernoulliTemp);
-  }
+  //--------------------------------------------------//
+  //-------for loop for cross entropy algorithm-------//
+  //--------------------------------------------------//
+  for(int m_crossEntropyCounter=0; m_crossEntropyCounter!=50; m_crossEntropyCounter++){
+    
+    //Calculate machine selection by bernoulli trail
+    std::vector< pair< double, std::vector<bool> > > m_vecTimeAndSelection;
+    std::vector<bool> m_vecBernoulliTemp;
+    double m_randomSeed = 0;
+    bool m_selectSeed = 0;
+    for(int j=0; j!=m_baseSize; j++){
+      for(int k=0; k!=numMachines; k++){
+        m_randomSeed = (double)rand()/(double)RAND_MAX;
+        if(m_vecCrossEntropyProb[k] - m_randomSeed > 0) m_selectSeed = 1;
+        else  m_selectSeed = 0;
+        if(j==0)  m_vecBernoulliTemp.push_back(m_selectSeed);
+        else  m_vecBernoulliTemp[k] = m_selectSeed;
+      }
+      for(int c=0; c!=m_vecNoPowerMachine.size(); c++) //prevent form selecting no power machine
+        m_vecBernoulliTemp[m_vecNoPowerMachine[c]] = 0;
+      if(j == 0){
+        for(int s=0; s!=numMachines; s++)
+          if(m_vecBernoulliTemp[s] == 1)  m_vecMachineSelection.push_back(s);
+      }
+      else{
+        m_vecMachineSelection.clear();
+        for(int s2=0; s2!=numMachines; s2++)
+          if(m_vecBernoulliTemp[s2] == 1)  m_vecMachineSelection.push_back(s2);
+      }
+      //for(int kk=0; kk!=m_vecMachineSelection.size(); kk++)
+        //cout << m_vecMachineSelection[kk] << " ";
+      
+      //Add machines with highest residual energy for fitting the fidelity ratio
+      //TO DO
+      
+      std::vector<double> m_vecChannelCapacity;
+      for(int q=0; q!=numMachines; q++)
+        m_vecChannelCapacity.push_back(m_myTopology(q,2));
+      
+      //SINR scheduling and calculate total time resource needed
+      std::vector<int> m_vecMachineSchedule;
+      int m_numSelected = m_vecMachineSelection.size();
+      if(m_scheAlgorithm == 1){
+        m_vecMachineSchedule = SINRscheduling(m_vecMachineSelection, m_vecChannelCapacity);
+        cout << "Number of selected machines = " << m_numSelected << endl;
+        cout << "Machine schedule = ";
+        for(int printsche=0; printsche!=m_numSelected; printsche++)
+          cout << m_vecMachineSchedule[printsche] << " ";
+        cout << endl;
+      }//end SINR scheduling
+      
+      m_vecTimeAndSelection.push_back(make_pair(0,m_vecBernoulliTemp));
+    } //end generating 8*N vector for cross entropy to run
+      
+  } //end cross entropy
 
-  /*/for test
-  cout << "Machine Selection = ";
-  for (int i=0; i!=10; i++){
-    m_vecMachineSelection.push_back(i);
-    cout << m_vecMachineSelection[i] << " ";
-  }
-  cout << endl;
-  int m_numSelected = m_vecMachineSelection.size();
-  std::vector<int> m_vecMachineSchedule;
-  if(m_scheAlgorithm == 1){
-    m_vecMachineSchedule = SINRscheduling(m_vecMachineSelection, m_myTopology);
-    cout << "Number of selected machines = " << m_numSelected << endl;
-    cout << "Machine schedule = ";
-    for(int j=0; j!=m_numSelected; j++) cout << m_vecMachineSchedule[j] << " ";
-    cout << endl;
-  }
-  //end test*/
   return m_vecMachineSelection;
 }
